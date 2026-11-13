@@ -1,8 +1,7 @@
-# financial-transaction-pipeline
-A Java-based data engineering pipeline that ingests financial transaction records, validates debit and credit balances, detects duplicates and data-quality issues, and publishes clean records while quarantining invalid transactions.
 
- 
 # Financial Transaction Validation Pipeline
+
+A Java-based data engineering pipeline that ingests financial transaction records, validates debit and credit balances, detects duplicates and data-quality issues, and publishes clean records while quarantining invalid transactions.
 
 ## 1. Project Overview
 
@@ -10,7 +9,7 @@ The Financial Transaction Validation Pipeline is a Java-based data engineering p
 
 The pipeline checks transaction schemas, debit and credit balances, currencies, duplicate events, account references, and event ordering.
 
-Valid transactions are published into curated output files, while invalid or anomalous records are stored separately in a quarantine area with rejection reasons.
+Valid transactions are published into curated output files, while invalid transaction groups are stored separately in a quarantine area with rejection reasons.
 
 ## 2. Business Objective
 
@@ -21,10 +20,11 @@ The pipeline prevents invalid and unbalanced transactions from entering curated 
 ## 3. Technology Stack
 
 - Java 8
-- Maven
-- CSV files
+- Apache Maven
+- Apache Commons CSV
 - JUnit 5
 - SLF4J and Logback
+- CSV files
 - Git and GitHub
 
 ## 4. Architecture
@@ -35,37 +35,47 @@ The pipeline follows these stages:
 2. Schema Validation – Check required fields and data types.
 3. Business Validation – Validate balances, currencies, account references, duplicates, and event ordering.
 4. Transformation – Organize and prepare valid transaction records.
-5. Publishing – Store valid records in curated output files.
-6. Quarantine – Store rejected records with error reasons.
-7. Monitoring – Generate execution logs and pipeline reports.
+5. Reconciliation – Verify accepted and rejected record counts and financial balances.
+6. Publishing – Store valid records in curated output files.
+7. Quarantine – Store rejected transaction records with rejection reasons.
+8. Monitoring – Generate execution logs and pipeline reports.
 
 ## 5. Project Structure
 
 ```text
 financial-transaction-pipeline/
-├── src/
-│   ├── main/java/
-│   └── test/java/
-├── data/
-│   ├── input/
-│   ├── output/
-│   ├── quarantine/
-│   └── reports/
-├── logs/
-├── docs/
-├── pom.xml
 ├── README.md
-└── .gitignore
+├── data_dictionary.md
+├── docs/
+│   └── architecture.md
+└── financial-transaction-pipeline/
+    ├── pom.xml
+    ├── .gitignore
+    ├── data/
+    │   ├── input/
+    │   ├── expected/
+    │   ├── output/
+    │   ├── quarantine/
+    │   └── reports/
+    ├── src/
+    │   ├── main/
+    │   │   ├── java/
+    │   │   └── resources/
+    │   └── test/
+    │       └── java/
+    └── logs/
 ```
 
 ## 6. Data Sources
 
 The project uses synthetic CSV data.
 
-- transactions.csv – Financial transaction legs.
-- accounts.csv – Account reference information.
+- `transactions.csv` – Financial transaction leg records.
+- `accounts.csv` – Account reference information.
 
 Each transaction leg has a unique leg ID and event ID. Multiple legs are grouped using a transaction ID.
+
+A synthetic data generator creates 100,000 transaction legs across 50,000 transaction groups using a fixed random seed.
 
 ## 7. Output
 
@@ -82,10 +92,10 @@ The pipeline produces:
 - Transaction amounts must be positive.
 - Required fields cannot be null or empty.
 - Currency must be valid and consistent within a transaction.
-- Account references must exist.
+- Referenced accounts must exist and be active.
 - Duplicate event IDs and leg IDs are rejected.
 - Event sequence numbers must be unique within a transaction.
-- Late-arriving events are identified and processed in deterministic event order.
+- Event timestamps must follow the defined event sequence.
 - Invalid transaction groups must not enter curated outputs.
 
 ## 9. Setup Instructions
@@ -99,7 +109,13 @@ The pipeline produces:
 ### Clone the repository
 
 ```bash
-git clone <YOUR_GITHUB_REPOSITORY_URL>
+git clone https://github.com/npsimba/financial-transaction-pipeline.git
+cd financial-transaction-pipeline
+```
+
+### Navigate to the Maven project
+
+```bash
 cd financial-transaction-pipeline
 ```
 
@@ -112,43 +128,62 @@ mvn clean package
 ### Run automated tests
 
 ```bash
-mvn test
+mvn clean test
 ```
 
-### Run the application
+### Run the sample pipeline
 
 ```bash
 mvn exec:java
 ```
 
-## 10. Testing
+### Generate synthetic data
 
-Automated tests will cover:
+```bash
+java -cp target/classes com.yottaflex.utils.SyntheticDataGenerator
+```
 
-- Valid transactions.
-- Empty input.
-- Malformed records.
-- Missing fields.
-- Duplicate records.
-- Invalid account references.
-- Debit and credit imbalances.
-- Currency mismatches.
-- Out-of-order events.
-- Repeated pipeline execution.
+### Process the generated dataset
+
+```bash
+mvn exec:java "-Dexec.args=data/input/generated_transactions.csv data/input/generated_accounts.csv"
+```
+
+## 10. Testing and Validation
+
+The project includes automated JUnit tests for:
+
+- Transaction field validation.
+- Account validation.
+- Duplicate leg and event detection.
+- Event ordering validation.
+- Currency consistency.
+- Debit and credit balance validation.
+
+The current test suite contains 18 automated tests, all passing.
 
 ## 11. Idempotency and Recovery
 
-The pipeline uses stable transaction leg identifiers to prevent duplicate records during reruns.
+The pipeline uses SHA-256 file fingerprints and input file paths to identify previously processed transaction files.
 
-Run information, processing counts, and rejected records are maintained for traceability.
+Repeated processing of an already processed input file is skipped to prevent unintended duplicate processing.
 
-Failed runs can be investigated and retried without unintentionally duplicating previously processed records.
+Run IDs, processing counts, rejected records, and execution reports support traceability.
 
-## 12. Performance
+## 12. Performance Testing
 
-A configurable synthetic data generator will support large-scale testing, including 100,000 or more records.
+A synthetic dataset containing 100,000 transaction legs across 50,000 transaction groups was generated using a fixed random seed.
 
-Execution time and processing statistics will be measured.
+Verified execution results:
+
+| Metric | Result |
+|---|---:|
+| Input records | 100,000 |
+| Accepted records | 100,000 |
+| Rejected records | 0 |
+| Errors | 0 |
+| Processing time | 2,021 ms |
+| Pipeline status | SUCCESS |
 
 ## 13. Limitations and Future Improvements
 
@@ -156,3 +191,4 @@ Execution time and processing statistics will be measured.
 - A production implementation could use a relational database.
 - Large-scale processing could be extended using Apache Spark.
 - Cloud storage and automated scheduling could be added in the future.
+- Additional monitoring and recovery mechanisms could be introduced.
