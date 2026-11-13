@@ -1,133 +1,123 @@
+# Data Dictionary — Financial Transaction Processing Pipeline
 
-# Data Dictionary
+## 1. Overview
 
-## 1. Transaction Source Data – transactions.csv
+This document describes the source data, target data, entities, fields, relationships, and validation rules used by the Financial Transaction Processing Pipeline.
 
-The `transactions.csv` file contains individual financial transaction legs. Each transaction can consist of multiple debit and credit legs grouped using `transaction_id`.
+The pipeline processes financial transaction legs, validates their integrity, checks debit-credit balances, and separates accepted and rejected records.
 
-| Column | Data Type | Description | Constraints |
-|---|---|---|---|
-| leg_id | String | Unique transaction leg identifier | Primary key, NOT NULL |
-| event_id | String | Unique event identifier | UNIQUE, NOT NULL |
-| transaction_id | String | Groups related transaction legs | NOT NULL |
-| account_id | String | Account involved in the transaction | Foreign key, NOT NULL |
-| leg_type | String | Type of transaction leg | DEBIT or CREDIT |
-| amount | BigDecimal | Financial transaction amount | Must be positive |
-| currency | String | Three-character currency code | NOT NULL |
-| event_timestamp | LocalDateTime | Transaction event timestamp | ISO-8601 format, NOT NULL |
-| event_sequence | Integer | Sequence of event within a transaction | Positive, unique per transaction |
+## 2. Source Data
 
-## 2. Account Reference Data – accounts.csv
+### 2.1 Transactions — `transactions.csv`
 
-The `accounts.csv` file contains account reference information used to validate transaction account IDs and account status.
+**Grain:** One row represents one transaction leg.
 
-| Column | Data Type | Description | Constraints |
-|---|---|---|---|
-| account_id | String | Unique account identifier | Primary key, NOT NULL |
-| account_status | String | Current account status | ACTIVE or INACTIVE |
-
-## 3. Derived Metadata
-
-The following metadata fields are added during pipeline processing.
-
-| Field | Data Type | Description |
+| Column | Data Type | Description |
 |---|---|---|
-| run_id | String | Unique identifier for each pipeline execution |
-| source_file | String | Original transaction input filename |
-| rejection_reason | String | Explanation for a rejected transaction |
-| processed_at | Timestamp | Time when the record was processed |
+| leg_id | String | Unique identifier for a transaction leg |
+| event_id | String | Unique event identifier |
+| transaction_id | String | Identifier linking related transaction legs |
+| account_id | String | Account associated with the transaction leg |
+| leg_type | String | Debit or Credit |
+| amount | Decimal | Transaction amount |
+| currency | String | Currency code |
+| event_timestamp | DateTime | Timestamp of the transaction event |
+| event_sequence | Integer | Sequence number of the event |
 
-## 4. Target Outputs
+### 2.2 Accounts — `accounts.csv`
 
-### 4.1 Curated Transactions
+**Grain:** One row represents one account.
 
-Contains transaction legs belonging only to successfully validated transaction groups.
+| Column | Data Type | Description |
+|---|---|---|
+| account_id | String | Unique account identifier |
+| account_status | String | Account status: ACTIVE or INACTIVE |
 
-The output includes:
+## 3. Target Data
 
-- Original transaction fields.
-- run_id
-- source_file
-- processed_at
+### 3.1 Curated Transactions
 
-Only valid and balanced transaction groups are published.
+Contains transaction legs that pass the pipeline's validation and reconciliation rules.
 
-### 4.2 Quarantined Transactions
-
-Contains rejected transaction records along with their rejection reasons.
-
-The output includes:
-
-- Original transaction fields.
-- rejection_reason
-- run_id
-- source_file
-- processed_at
-
-Rejected records are retained for investigation and traceability.
-
-### 4.3 Pipeline Run Report
-
-The pipeline generates a CSV execution report containing the following fields:
+The output preserves the transaction fields and includes processing metadata:
 
 | Field | Description |
 |---|---|
-| run_id | Unique pipeline execution identifier |
-| input_count | Total input transaction legs |
-| accepted_count | Number of accepted transaction legs |
-| rejected_count | Number of rejected transaction legs |
-| error_count | Number of reconciliation errors |
-| status | Final pipeline execution status |
+| run_id | Identifier of the processing run |
+| source_file | Source transaction file |
+| processed_at | Processing timestamp |
 
-## 5. Entity Relationships
+### 3.2 Quarantined Transactions
+
+Contains transaction legs rejected during validation.
+
+| Field | Description |
+|---|---|
+| rejection_reason | Explanation for rejection |
+| run_id | Identifier of the processing run |
+| source_file | Source transaction file |
+| processed_at | Processing timestamp |
+
+Rejected transaction groups are kept out of the curated output.
+
+### 3.3 Pipeline Run Report
+
+The report records the outcome of a pipeline execution.
+
+| Column | Data Type | Description |
+|---|---|---|
+| run_id | String | Unique pipeline run identifier |
+| input_count | Integer | Number of input records |
+| accepted_count | Integer | Number of accepted records |
+| rejected_count | Integer | Number of rejected records |
+| error_count | Integer | Number of processing errors |
+| status | String | Pipeline execution status |
+
+Execution start, completion, and elapsed-time information are also recorded through application logging.
+
+## 4. Entity Relationships
 
 - One transaction can contain multiple transaction legs.
-- Each transaction leg belongs to one account.
-- Each account can participate in multiple transactions.
-- Each transaction leg has one unique leg ID and event ID.
-- Multiple transaction legs are grouped using transaction_id.
+- Each transaction leg references an account.
+- Each account can be associated with multiple transaction legs.
+- Each pipeline run processes a source transaction file and produces accepted records, rejected records, and a run report.
 
-### Relationship Summary
+## 5. Primary Keys and Relationships
 
-- Transaction to Transaction Legs: One-to-Many.
-- Account to Transaction Legs: One-to-Many.
+| Entity | Key | Purpose |
+|---|---|---|
+| Transaction leg | leg_id | Uniquely identifies a transaction leg |
+| Event | event_id | Identifies a transaction event |
+| Transaction | transaction_id | Groups related transaction legs |
+| Account | account_id | Identifies an account |
+| Pipeline run | run_id | Identifies a processing execution |
 
-## 6. Business Constraints
+## 6. Data Quality and Business Rules
 
-1. Total debit amount must equal total credit amount for each transaction and currency.
-2. All transaction legs within the same transaction must use the same currency.
-3. Every referenced account must exist and have ACTIVE status.
-4. Leg IDs and event IDs must be unique.
-5. Transaction amounts must be positive.
-6. Leg type must be either DEBIT or CREDIT.
-7. Event sequence numbers must be unique within a transaction.
-8. Event timestamps must follow the event sequence.
-9. If a transaction fails group-level validation, all its legs are quarantined.
-10. Invalid transaction groups must never enter curated outputs.
-11. Required transaction fields must not be null or empty.
+1. Required fields must be present.
+2. Transaction leg IDs and event IDs must be unique.
+3. Transaction amounts must be positive.
+4. Every transaction leg must reference a valid active account.
+5. Currency must be consistent within a transaction.
+6. Event sequence and timestamp ordering must be validated.
+7. Debit and credit totals must balance for each transaction.
+8. Invalid transaction groups must be quarantined.
+9. Accepted and rejected record counts must reconcile with the input count.
 
-## 7. Data Processing and Integrity
+## 7. Data Types and Precision
 
-- Financial calculations use BigDecimal to maintain decimal precision.
-- Transaction groups are validated before publishing.
-- Duplicate detection uses leg IDs and event IDs.
-- SHA-256 input file fingerprints support idempotent processing.
-- Reconciliation checks ensure input records are accounted for as accepted or rejected.
-- Rejected records retain their rejection reasons for traceability.
-- Run reports and application logs provide execution monitoring information.
+- Financial amounts use Java `BigDecimal` to avoid floating-point precision issues.
+- Identifiers are represented as strings.
+- Event timestamps use date-time values.
+- Event sequence and record counts use integer values.
+- Currency is represented using a currency code.
 
-## 8. Data Quality and Validation
+## 8. Assumptions and Limitations
 
-The pipeline performs the following validation checks:
-
-- Required field validation.
-- Data type and amount validation.
-- Account existence and account status validation.
-- Duplicate leg and event detection.
-- Currency consistency validation.
-- Event sequence and timestamp ordering validation.
-- Debit and credit balance validation.
-- Accepted and rejected record reconciliation.
-
-Invalid transaction groups are quarantined rather than published into curated outputs.
-
+- Input data is supplied as CSV files.
+- The account input contains account identifiers and account status.
+- A transaction consists of one or more related transaction legs.
+- A balanced transaction has equal debit and credit totals.
+- The current idempotency mechanism uses the transaction input file path and SHA-256 fingerprint.
+- Account-file changes are not independently included in the current idempotency fingerprint.
+- Malformed CSV handling, atomic output publishing, and expanded recovery scenarios are areas for future improvement.
