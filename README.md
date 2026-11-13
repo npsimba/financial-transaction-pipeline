@@ -1,46 +1,30 @@
+# Financial Transaction Processing Pipeline
 
-# Financial Transaction Validation Pipeline
+A Java-based data engineering pipeline that ingests financial transaction records, validates transaction legs, checks account references and debit-credit balances, quarantines invalid records, and publishes curated output with reconciliation reports.
 
-A Java-based data engineering pipeline that ingests financial transaction records, validates debit and credit balances, detects duplicates and data-quality issues, and publishes clean records while quarantining invalid transactions.
+## Features
 
-## 1. Project Overview
+- CSV ingestion for transactions and accounts.
+- Schema and required-field validation.
+- Account status and reference validation.
+- Duplicate transaction-leg and event detection.
+- Currency consistency and event-order validation.
+- Debit-credit balance reconciliation using `BigDecimal`.
+- Invalid transaction groups are quarantined.
+- Deterministic output ordering.
+- SHA-256 input fingerprint-based protection against processing the same transaction file twice.
+- Run reports, logging, and reconciliation checks.
+- Synthetic data generator with a fixed seed.
 
-The Financial Transaction Validation Pipeline is a Java-based data engineering project designed to process and validate financial transaction records.
-
-The pipeline checks transaction schemas, debit and credit balances, currencies, duplicate events, account references, and event ordering.
-
-Valid transactions are published into curated output files, while invalid transaction groups are stored separately in a quarantine area with rejection reasons.
-
-## 2. Business Objective
-
-The main objective is to ensure financial transaction data is accurate, consistent, reliable, and suitable for analytical use.
-
-The pipeline prevents invalid and unbalanced transactions from entering curated outputs.
-
-## 3. Technology Stack
+## Technology
 
 - Java 8
-- Apache Maven
+- Maven
 - Apache Commons CSV
 - JUnit 5
 - SLF4J and Logback
-- CSV files
-- Git and GitHub
 
-## 4. Architecture
-
-The pipeline follows these stages:
-
-1. Data Ingestion – Read transaction and account CSV files.
-2. Schema Validation – Check required fields and data types.
-3. Business Validation – Validate balances, currencies, account references, duplicates, and event ordering.
-4. Transformation – Organize and prepare valid transaction records.
-5. Reconciliation – Verify accepted and rejected record counts and financial balances.
-6. Publishing – Store valid records in curated output files.
-7. Quarantine – Store rejected transaction records with rejection reasons.
-8. Monitoring – Generate execution logs and pipeline reports.
-
-## 5. Project Structure
+## Repository Structure
 
 ```text
 financial-transaction-pipeline/
@@ -50,7 +34,6 @@ financial-transaction-pipeline/
 │   └── architecture.md
 └── financial-transaction-pipeline/
     ├── pom.xml
-    ├── .gitignore
     ├── data/
     │   ├── input/
     │   ├── expected/
@@ -59,122 +42,88 @@ financial-transaction-pipeline/
     │   └── reports/
     ├── src/
     │   ├── main/
-    │   │   ├── java/
-    │   │   └── resources/
     │   └── test/
-    │       └── java/
     └── logs/
 ```
 
-## 6. Data Sources
+## Requirements
 
-The project uses synthetic CSV data.
+- Java 8 or later
+- Maven 3.9 or later
 
-- `transactions.csv` – Financial transaction leg records.
-- `accounts.csv` – Account reference information.
+## Setup
 
-Each transaction leg has a unique leg ID and event ID. Multiple legs are grouped using a transaction ID.
-
-A synthetic data generator creates 100,000 transaction legs across 50,000 transaction groups using a fixed random seed.
-
-## 7. Output
-
-The pipeline produces:
-
-- Curated transaction records.
-- Rejected transaction records with validation reasons.
-- Pipeline execution reports.
-- Application logs.
-
-## 8. Business Rules
-
-- Debit and credit totals must balance for each transaction and currency.
-- Transaction amounts must be positive.
-- Required fields cannot be null or empty.
-- Currency must be valid and consistent within a transaction.
-- Referenced accounts must exist and be active.
-- Duplicate event IDs and leg IDs are rejected.
-- Event sequence numbers must be unique within a transaction.
-- Event timestamps must follow the defined event sequence.
-- Invalid transaction groups must not enter curated outputs.
-
-## 9. Setup Instructions
-
-### Prerequisites
-
-- Java 8 or compatible JDK.
-- Apache Maven 3.6 or later.
-- Git.
-
-### Clone the repository
+Clone the repository:
 
 ```bash
 git clone https://github.com/npsimba/financial-transaction-pipeline.git
 cd financial-transaction-pipeline
-```
-
-### Navigate to the Maven project
-
-```bash
 cd financial-transaction-pipeline
 ```
 
-### Build the project
-
-```bash
-mvn clean package
-```
-
-### Run automated tests
+Run automated tests:
 
 ```bash
 mvn clean test
 ```
 
-### Run the sample pipeline
+Run the sample pipeline:
 
 ```bash
-mvn exec:java
+mvn exec:java "-Dexec.args=data/input/transactions.csv data/input/accounts.csv"
 ```
 
-### Generate synthetic data
+The pipeline writes accepted transactions, rejected records, and a run report into the corresponding output directories.
+
+## Generate Synthetic Data
+
+Run:
 
 ```bash
 java -cp target/classes com.yottaflex.utils.SyntheticDataGenerator
 ```
 
-### Process the generated dataset
+The generator uses a fixed random seed (`42`) and produces:
+
+- 100,000 transaction legs
+- 50,000 transaction groups
+- 100 accounts
+- Expected labels in a separate expected-data file
+
+Run the generated dataset:
 
 ```bash
 mvn exec:java "-Dexec.args=data/input/generated_transactions.csv data/input/generated_accounts.csv"
 ```
 
-## 10. Testing and Validation
+## Validation Rules
 
-The project includes automated JUnit tests for:
+The pipeline checks:
 
-- Transaction field validation.
-- Account validation.
-- Duplicate leg and event detection.
-- Event ordering validation.
-- Currency consistency.
-- Debit and credit balance validation.
+1. Required transaction fields and valid values.
+2. Unique leg IDs and event IDs.
+3. Valid account references and active account status.
+4. Positive transaction amounts.
+5. Consistent currency within a transaction.
+6. Valid event sequence and timestamp ordering.
+7. Equal debit and credit totals for each transaction.
+8. Reconciliation between input, accepted, and rejected records.
 
-The current test suite contains 18 automated tests, all passing.
+A transaction group that fails validation is quarantined rather than published as curated data.
 
-## 11. Idempotency and Recovery
+## Test Results
 
-The pipeline uses SHA-256 file fingerprints and input file paths to identify previously processed transaction files.
+The current automated test suite contains 18 tests covering transaction validation, account validation, duplicate detection, event ordering, and transaction-group processing.
 
-Repeated processing of an already processed input file is skipped to prevent unintended duplicate processing.
+Run the tests with:
 
-Run IDs, processing counts, rejected records, and execution reports support traceability.
+```bash
+mvn clean test
+```
 
-## 12. Performance Testing
+## Performance Test
 
-A synthetic dataset containing 100,000 transaction legs across 50,000 transaction groups was generated using a fixed random seed.
-
-Verified execution results:
+A synthetic dataset containing 100,000 transaction legs was processed successfully.
 
 | Metric | Result |
 |---|---:|
@@ -182,13 +131,28 @@ Verified execution results:
 | Accepted records | 100,000 |
 | Rejected records | 0 |
 | Errors | 0 |
-| Processing time | 2,021 ms |
-| Pipeline status | SUCCESS |
+| Execution time | 2,021 ms |
+| Status | SUCCESS |
 
-## 13. Limitations and Future Improvements
+Results are from a local execution and may vary by machine.
 
-- Current implementation uses local CSV files.
-- A production implementation could use a relational database.
-- Large-scale processing could be extended using Apache Spark.
-- Cloud storage and automated scheduling could be added in the future.
-- Additional monitoring and recovery mechanisms could be introduced.
+## Idempotency and Recovery
+
+The pipeline uses a SHA-256 fingerprint and input file path to identify previously processed transaction files. Re-running the same transaction input is skipped to avoid duplicate processing.
+
+## Documentation
+
+- [Data Dictionary](data_dictionary.md)
+- [Architecture](docs/architecture.md)
+
+## Limitations and Future Improvements
+
+- Add row-level quarantine handling for malformed CSV records.
+- Extend integration tests for empty batches, schema changes, and partial failures.
+- Improve atomic publishing and recovery after output-write failures.
+- Include explicit run start and end timestamps in the run report.
+- Extend idempotency tracking to include account input changes.
+
+## Author
+
+Developed as a financial transaction data pipeline engineering challenge.
